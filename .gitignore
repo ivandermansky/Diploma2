@@ -1,0 +1,112 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Eclipse
+.project
+.classpath
+.settings/
+.metadata
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# Visual Studio Code
+.vscode/
+
+# Compiled class files
+*.class
+
+# Log files
+*.log
+logs/
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Test and coverage reports
+test-output/
+coverage/
+.coverage/
+*.lcov
+
+# Allure reports
+allure-results/
+allure-report/
+
+# REST Assured logs
+rest-assured-logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local configuration
+*.properties
+!pom.xml
+!application*.properties
+
+# IDE-specific files
+*.swp
+*.swo
+*~
+
+# Build tools
+.gradle/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# Backup files
+*~
+*.bak
+*.old
+
+# Sensitive files
+*.key
+*.pem
+*.crt
+*.keystore
+
+# Custom test data
+test-data/
+temp-data/
