@@ -1,5 +1,6 @@
 /*
-Тест использует параметризованный подход (@RunWith(Parameterized.class)) для проверки обработки ошибок при попытке входа пользователя с неполными или некорректными данными.
+Тест shouldLoginSuccessfully() проверяет позитивный сценарий входа пользователя в систему.
+Проверяется полный цикл: регистрация нового пользователя → авторизация → проверка корректности ответа сервера.
 */
 
 package UserTestPackage;
@@ -10,96 +11,121 @@ import io.qameta.allure.Step;
 import io.qameta.allure.junit4.DisplayName;
 import io.restassured.response.ValidatableResponse;
 import org.assertj.core.api.SoftAssertions;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import User.Credentials;
 import User.User;
 import User.UserActivities;
 import User.GenerateUserData;
 
-import static org.apache.http.HttpStatus.SC_UNAUTHORIZED;
+import static org.apache.http.HttpStatus.SC_OK;
 import static org.junit.Assert.*;
 
-@RunWith(Parameterized.class)
-
-public class UserLoginNegativeTest {
+public class UserLoginPositiveTest {
     private UserActivities userActivities;
-    private final User user;
-    private final int expectedStatusCode;
-    private final String expectedMessage;
+    private User testUser;
+    private String accessToken;
 
-    // Поля для хранения результатов запроса
-    private int responseStatusCode;
+    // Поля для хранения результатов создания пользователя
+    private int createStatusCode;
+    private boolean userCreated;
+
+    // Поля для хранения результатов аутентификации
+    private int loginStatusCode;
     private boolean userLoggedIn;
-    private String responseMessage;
-
-    public UserLoginNegativeTest(User user, int expectedStatusCode, String expectedMessage) {
-        this.user = user;
-        this.expectedStatusCode = expectedStatusCode;
-        this.expectedMessage = expectedMessage;
-    }
-
-    @Parameterized.Parameters(name = "Тест {index}: {0} → статус {1}")
-    public static Object[][] getTestData() {
-        return new Object[][]{
-                {
-                        GenerateUserData.createUserWithEmailOnly(),
-                        SC_UNAUTHORIZED,
-                        "email or password are incorrect"
-                },
-                {
-                        GenerateUserData.createUserWithPasswordOnly(),
-                        SC_UNAUTHORIZED,
-                        "email or password are incorrect"
-                }
-        };
-    }
 
     @Before
     @Description("Подготовка тестового окружения:\n" +
-            "- инициализируется UserActivities.")
+            "- инициализируется UserActivities;\n" +
+            "- создаётся уникальный тестовый пользователь.")
     public void setUp() {
         userActivities = new UserActivities();
+        testUser = GenerateUserData.createUniqueUser();
+    }
+
+    @After
+    @Description("Очистка тестовых данных:\n" +
+            "- удаляется тестовый пользователь по accessToken (если он был получен).")
+    public void tearDown() {
+        if (accessToken != null) {
+            userActivities.deleteUser(accessToken);
+        }
     }
 
     @Test
-    @DisplayName("Вход пользователя с пропущенным обязательным полем")
-    @Description("Проверка обработки ошибок при отсутствии обязательных полей в запросе аутентификации.\n\n" +
+    @DisplayName("Успешный вход пользователя в систему")
+    @Description("Проверка полного цикла: регистрация → авторизация → валидация ответа сервера.\n\n" +
             "Шаги теста:\n" +
-            "- отправляется запрос на аутентификацию с неполными данными;\n" +
-            "- прикрепляются данные запроса и ответа к отчёту Allure;\n" +
-            "- извлекаются статус ответа, success и сообщение из тела ответа;\n" +
-            "- проверяются статус, success: false и сообщение об ошибке.\n\n" +
+            "- создаётся новый пользователь;\n" +
+            "- выполняется запрос на аутентификацию с корректными данными;\n" +
+            "- проверяются статус, success: true и наличие accessToken;\n" +
+            "- прикрепляются данные запросов и ответов к отчёту Allure.\n\n" +
             "Ожидаемый результат:\n" +
-            "- сервер возвращает статус 401 Unauthorized для запросов с неполными данными;\n" +
-            "- в теле ответа содержится поле success: false;\n" +
-            "- возвращается сообщение с указанием на некорректные данные аутентификации.")
-    public void shouldNotLoginWithMissingField() {
-        performLoginRequest();
-        verifyLoginErrorResponse();
+            "- сервер возвращает статус 200 OK для корректных данных;\n" +
+            "- в теле ответа содержится поле success: true;\n" +
+            "- возвращается валидный токен доступа.")
+    public void shouldLoginSuccessfully() {
+        createTestUser();
+        performLogin();
+        verifySuccessfulLogin();
     }
 
-    @Step("Отправить запрос на аутентификацию с неполными данными")
-    @Description("Отправка запроса на аутентификацию с неполным набором данных и сохранение результатов для проверки.\n" +
+    @Step("Создать тестового пользователя для аутентификации")
+    @Description("Отправка запроса на создание нового пользователя и сохранение результатов для проверки.\n" +
             "Действия:\n" +
-            "- выполняется POST‑запрос loginUser с данными user;\n" +
+            "- выполняется POST‑запрос createUser с данными testUser;\n" +
             "- прикрепляются данные запроса и ответа к отчёту Allure;\n" +
-            "- извлекаются: статус ответа, success, сообщение об ошибке;\n" +
+            "- извлекаются статус ответа и флаг success;\n" +
             "- сохраняются результаты в поля класса для последующей проверки.\n\n" +
             "Возвращаемые данные:\n" +
             "- статус ответа;\n" +
-            "- флаг успешности аутентификации (success);\n" +
-            "- сообщение об ошибке.")
-    private void performLoginRequest() {
-        ValidatableResponse loginUserResponse = userActivities.loginUser(Credentials.from(user));
+            "- флаг успешности создания пользователя (success).")
+    private void createTestUser() {
+        ValidatableResponse createUserResponse = userActivities.createUser(testUser);
 
-        // Добавить вложения для отладки в отчёт Allure
+        // Добавить вложение с данными создания пользователя
         io.qameta.allure.Allure.addAttachment(
-                "Login request data (missing fields)",
+                "Create user request data",
                 "text/plain",
-                user.toString()
+                testUser.toString()
+        );
+        io.qameta.allure.Allure.addAttachment(
+                "Create user response",
+                "application/json",
+                createUserResponse.extract().asString()
+        );
+
+        int statusCode = createUserResponse.extract().statusCode();
+        boolean isUserCreated = createUserResponse.extract().path("success");
+
+        setCreateUserResults(statusCode, isUserCreated);
+    }
+
+    private void setCreateUserResults(int statusCode, boolean isUserCreated) {
+        this.createStatusCode = statusCode;
+        this.userCreated = isUserCreated;
+    }
+
+    @Step("Выполнить вход пользователя в систему")
+    @Description("Отправка запроса на аутентификацию с корректными учётными данными и сохранение результатов.\n" +
+            "Действия:\n" +
+            "- выполняется POST‑запрос loginUser с данными testUser;\n" +
+            "- прикрепляются данные запроса и ответа к отчёту Allure;\n" +
+            "- извлекаются статус ответа, success и accessToken;\n" +
+            "- сохраняются результаты в поля класса для последующей проверки.\n\n" +
+            "Возвращаемые данные:\n" +
+            "- статус ответа;\n" +
+            "- флаг успешности входа (success);\n" +
+            "- токен доступа (accessToken).")
+    private void performLogin() {
+        ValidatableResponse loginUserResponse = userActivities.loginUser(Credentials.from(testUser));
+
+        // Добавить вложение с данными запроса на вход
+        io.qameta.allure.Allure.addAttachment(
+                "Login request data",
+                "text/plain",
+                testUser.toString()
         );
         io.qameta.allure.Allure.addAttachment(
                 "Login response data",
@@ -109,41 +135,47 @@ public class UserLoginNegativeTest {
 
         int statusCode = loginUserResponse.extract().statusCode();
         boolean isUserLoggedIn = loginUserResponse.extract().path("success");
-        String actualMessage = loginUserResponse.extract().path("message");
+        accessToken = loginUserResponse.extract().path("accessToken");
 
-        // Сохранить результаты для проверки
-        setTestResults(statusCode, isUserLoggedIn, actualMessage);
+        setLoginResults(statusCode, isUserLoggedIn);
     }
 
-    public void setTestResults(int statusCode, boolean isUserLoggedIn, String message) {
-        this.responseStatusCode = statusCode;
+    private void setLoginResults(int statusCode, boolean isUserLoggedIn) {
+        this.loginStatusCode = statusCode;
         this.userLoggedIn = isUserLoggedIn;
-        this.responseMessage = message;
     }
 
-    @Step("Проверить ответ об ошибке аутентификации")
-    @Description("Проверка параметров ответа при ошибке аутентификации.\n" +
+    @Step("Проверить успешный вход пользователя")
+    @Description("Проверка параметров ответа при успешной аутентификации.\n" +
             "Проверки:\n" +
-            "- статус ответа соответствует ожидаемому (401);\n" +
-            "- поле success в ответе равно false;\n" +
-            "- сообщение об ошибке соответствует ожидаемому тексту.\n\n" +
+            "- статус ответа соответствует ожидаемому (200);\n" +
+            "- поле success в ответе равно true;\n" +
+            "- accessToken не равен null.\n\n" +
             "Ожидаемый результат:\n" +
             "- все проверки проходят успешно;\n" +
             "- отчёт чётко показывает, какая проверка не прошла (если есть ошибка).")
-    public void verifyLoginErrorResponse() {
+    private void verifySuccessfulLogin() {
         SoftAssertions softly = new SoftAssertions();
 
-        softly.assertThat(responseStatusCode)
-                .as("Ожидается статус " + expectedStatusCode)
-                .isEqualTo(expectedStatusCode);
+        softly.assertThat(createStatusCode)
+                .as("Ожидается статус 200 при создании пользователя")
+                .isEqualTo(SC_OK);
+
+        softly.assertThat(userCreated)
+                .as("Пользователь должен быть успешно создан")
+                .isTrue();
+
+        softly.assertThat(loginStatusCode)
+                .as("Ожидается статус 200 при входе")
+                .isEqualTo(SC_OK);
 
         softly.assertThat(userLoggedIn)
-                .as("Ожидается неуспешный вход (success: false)")
-                .isFalse();
+                .as("Ожидается успешный вход (success: true)")
+                .isTrue();
 
-        softly.assertThat(responseMessage)
-                .as("Ожидается сообщение об ошибке: '" + expectedMessage + "'")
-                .isEqualTo(expectedMessage);
+        softly.assertThat(accessToken)
+                .as("Токен доступа должен быть получен")
+                .isNotNull();
 
         softly.assertAll();
     }
