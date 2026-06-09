@@ -1,0 +1,1 @@
+{"success":false,"message":"Email, password and name are required fields"}
